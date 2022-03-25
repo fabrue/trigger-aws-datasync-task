@@ -1,0 +1,31 @@
+name: Trigger DataSync task
+description: Trigger an AWS DataSync task
+inputs:
+  task-name:
+    description: Task name
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Fetch DataSync task ARN
+      shell: bash
+      run: |
+        FETCHED_TASK_ARN=$(aws datasync list-tasks --query 'Tasks[*]' | jq -r '.[] | select(.Name=="${{ inputs.task-name }}") | .TaskArn ')
+        echo "TASK_ARN=$(echo $FETCHED_TASK_ARN)"
+        echo "TASK_ARN=$(echo $FETCHED_TASK_ARN)" >> $GITHUB_ENV
+
+    - name: Trigger task
+      shell: bash
+      run: |
+        TASK_EXECUTION_ARN=$(aws datasync start-task-execution --task-arn ${{ env.TASK_ARN }} | jq -r .TaskExecutionArn )
+        echo "TASK_EXECUTION_ARN=$(echo $TASK_EXECUTION_ARN)"
+        echo "TASK_EXECUTION_ARN=$(echo $TASK_EXECUTION_ARN)" >> $GITHUB_ENV
+
+    - name: Wait for task to finish
+      shell: bash
+      run: |
+        while [[ $(aws datasync describe-task-execution --task-execution-arn ${{ env.TASK_EXECUTION_ARN }} | jq -r .Status) != SUCCESS ]]; do
+          echo 'Task has not finished yet - wait 1 more minute'
+          sleep 1m
+        done    
